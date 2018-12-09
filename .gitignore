@@ -1,0 +1,10 @@
+*.pyc
+*.png
+*.jpg
+*.mp4
+*.avi
+*__pycache__
+.ipynb_checkpoints
+dataset
+weights
+docs
