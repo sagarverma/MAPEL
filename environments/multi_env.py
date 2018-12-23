@@ -248,9 +248,10 @@ class Environment(object):
 
         #invaders rendering
         for invader in self.invaders.values():
-            img[self.grid == invader.id] = [255, 0, 0]
-            invader_observation = invader.get_observed_environment(self)
-            img[invader_observation == 0] = [128,5,5]
+            if invader.speed:
+                img[self.grid == invader.id] = [255, 0, 0]
+                invader_observation = invader.get_observed_environment(self)
+                img[invader_observation == 0] = [128,5,5]
 
         #guards rendering
         for guard in self.guards.values():
@@ -258,8 +259,8 @@ class Environment(object):
             guard_observation = guard.get_observed_environment(self)
             img[guard_observation == 0] = [5,128,5]
 
-        plt.imshow(img.astype(np.uint8))
+        # plt.imshow(img.astype(np.uint8))
         # cv2.imwrite('test.png', img)
-        plt.pause(self.sim_speed)
-        plt.draw()
-        # return img
+        # plt.pause(self.sim_speed)
+        # plt.draw()
+        return img

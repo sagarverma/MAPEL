@@ -81,7 +81,7 @@ for i in range(1):
     guard = NGuard(speed=1, obs_size=3)
     target = Target(speed=0)
 
-    env = NEnvironment([32,32], guard, invader, target, sim_speed=0.0001)
+    env = NEnvironment([32,32], guard, invader, target, sim_speed=0.01)
 
     done = False
 
