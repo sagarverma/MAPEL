@@ -1,8 +1,12 @@
-from multiprocessing import Queue
-from env import Environment, Agent, Invader, Target, Guard
+import sys
+sys.path.append('../environments')
+from env import Environment
+from agent import Agent, Invader, Target, Guard
+from graph import NxGraph
+
 import cv2
 import random
-from graph import NxGraph
+from multiprocessing import Queue
 import numpy as np
 import time
 import matplotlib.pyplot as plt
@@ -46,7 +50,7 @@ class NGuard(Guard):
                 return [shortest_path2[self.speed][0], shortest_path2[self.speed][1]]
 
 guard_wins = 0
-for i in range(10):
+for i in range(1):
     # os.mkdir('dataset/sims/intelligent_bfs/' + str(i).zfill(2))
 
     invader = Invader(speed=1)
@@ -64,6 +68,7 @@ for i in range(10):
         current_obs = env.grid
         guard_action, invader_action = env.act()
         obs, reward, done, info = env.step(guard_action, invader_action)
+        env.render()
 
         # img = np.zeros((32,32,3))
         # img[obs == 1] = [255, 255, 255]

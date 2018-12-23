@@ -1,6 +1,9 @@
-from multiprocessing import Queue
+import sys
+sys.path.append('../environments')
 from multi_env import *
 from multi_agent import *
+
+from multiprocessing import Queue
 import cv2
 import random
 
@@ -19,12 +22,12 @@ def baseline_testing(grid_size):
     while not done:
         guard_action, invader_action = env.act()
         obs, reward, done = env.step(guard_action, invader_action)
-        #env.render()
+        env.render()
 
     return env.wins
 
 guard_wins = 0
-for i in range(100):
+for i in range(1):
     wins = baseline_testing([32,32])
     if wins == 2 or wins == 3:
         guard_wins += 1

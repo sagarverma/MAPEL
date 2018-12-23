@@ -1,5 +1,13 @@
+import sys
+sys.path.append('../environments')
+from env import Environment
+from agent import Invader, Guard, Target, Agent
+
+sys.path.append('../utils')
+from dataloader import *
+from graph import NxGraph
+
 from multiprocessing import Queue
-from env import Environment, Agent, Invader, Target, Guard
 import cv2
 import random
 from graph import NxGraph
@@ -122,11 +130,11 @@ def featurize(obs):
 # rewards = []
 
 for phase in ['train','test']:
-    fout = open('dataset/partial_intelligent_bfs/' + phase + '.csv', 'wb')
+    fout = open('../dataset/partial_intelligent_bfs/' + phase + '.csv', 'w')
     w = csv.writer(fout)
 
     obs_no = 1
-    for i in range(5000):
+    for i in range(1):
         invader = Invader(speed=1, obs_size=5)
         guard = NGuard(speed=1, obs_size=5)
         target = Target(speed=0)
@@ -157,7 +165,7 @@ for phase in ['train','test']:
                 invader_observation = invader.get_observed_environment(obs)
                 img[invader_observation == 0] = [128,5,5]
 
-            cv2.imwrite('dataset/partial_intelligent_bfs/' + phase + '/' + str(obs_no).zfill(10) + '.png', img)
+            cv2.imwrite('../dataset/partial_intelligent_bfs/' + phase + '/' + str(obs_no).zfill(10) + '.png', img)
             w.writerow([str(obs_no).zfill(10) + '.png', loc_to_action(guard_current_loc, guard_action)])
             obs_no += 1
     # fout = open('dataset/intelligent_bfs/sim.pkl', "wb")

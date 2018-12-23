@@ -1,8 +1,14 @@
+import sys
+sys.path.append('../environments')
+from env import Environment
+from agent import Agent, Invader, Target, Guard
+
+from graph import NxGraph
+
 from multiprocessing import Queue
-from env import Environment, Agent, Invader, Target, Guard
 import cv2
 import random
-from graph import NxGraph
+
 import numpy as np
 import time
 import matplotlib.pyplot as plt
@@ -68,7 +74,7 @@ class NGuard(Guard):
 
 
 guard_wins = 0
-for i in range(10):
+for i in range(1):
     # os.mkdir('dataset/sims/partial_intelligent_bfs/' + str(i).zfill(2))
 
     invader = Invader(speed=1, obs_size=3)

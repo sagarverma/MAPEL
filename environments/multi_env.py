@@ -1,3 +1,4 @@
+import sys
 import numpy as np
 import random
 import time
@@ -9,7 +10,8 @@ import cv2
 from shapely.geometry import Point
 from shapely.geometry import box
 
-import dungeonGenerator
+sys.path.append('../utils/')
+from dungeonGenerator import dungeonGenerator
 from graph import Graph, NxGraph
 
 class Environment(object):
@@ -24,7 +26,7 @@ class Environment(object):
         if self.fixed_grid:
             self.grid = np.load('fixed_grid.npy')
         else:
-            dungeon = dungeonGenerator.dungeonGenerator(*self.grid_size)
+            dungeon = dungeonGenerator(*self.grid_size)
             dungeon.placeRandomRooms(2, 10, 5, 2)
             self.grid = np.asarray(dungeon.grid)
 
@@ -65,7 +67,7 @@ class Environment(object):
         if self.fixed_grid:
             self.grid = np.load('fixed_grid.npy')
         else:
-            dungeon = dungeonGenerator.dungeonGenerator(*self.grid_size)
+            dungeon = dungeonGenerator(*self.grid_size)
             dungeon.placeRandomRooms(2, 10, 5, 2)
             self.grid = np.asarray(dungeon.grid)
 
@@ -256,8 +258,8 @@ class Environment(object):
             guard_observation = guard.get_observed_environment(self)
             img[guard_observation == 0] = [5,128,5]
 
-        #plt.imshow(img.astype(np.uint8))
+        plt.imshow(img.astype(np.uint8))
         # cv2.imwrite('test.png', img)
-        #plt.pause(self.sim_speed)
-        #plt.draw()
-        return img
+        plt.pause(self.sim_speed)
+        plt.draw()
+        # return img
