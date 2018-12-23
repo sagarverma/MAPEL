@@ -1,3 +1,4 @@
+import sys
 import numpy as np
 import random
 import time
@@ -9,10 +10,10 @@ import cv2
 from shapely.geometry import Point
 from shapely.geometry import box
 
-import dungeonGenerator
+sys.path.append('../utils/')
+from dungeonGenerator import dungeonGenerator
 from graph import Graph, NxGraph
-
-from utils.folder import populate_adjacent_locs2, print_grid
+from dataloader import populate_adjacent_locs2, print_grid
 
 class Agent(object):
 

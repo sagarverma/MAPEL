@@ -90,18 +90,12 @@ def pil_loader(path):
         img = Image.open(f)
         return img.convert('RGB')
 
-def valid_loc(grid, loc):
-    if loc[0] > 0 and loc[1] > 0 and loc[0] < grid.shape[0] and loc[1] < grid.shape[1]:
-        return True
-
-    return False
-
 def print_grid(grid):
     for i in range(grid.shape[0]):
         for j in range(grid.shape[1]):
-            print grid[i][j],
-        print
-    print "##############################################################################"
+            print (grid[i][j], end=',')
+        print ()
+    print ("##############################################################################")
 
 def get_adjacent_locs(current_loc):
     adjacent_locs = [[current_loc[0] - 1, current_loc[1] - 1],
@@ -133,6 +127,46 @@ def populate_adjacent_locs2(current_loc, size):
             nmap[adjacent_loc[0], adjacent_loc[1]] = 0
 
     return nmap
+
+def action_to_loc(current_loc, action):
+    return get_adjacent_locs(current_loc)[action]
+
+def valid_loc(grid, loc):
+    if loc[0] > 0 and loc[1] > 0 and loc[0] < grid.shape[0] and loc[1] < grid.shape[1]:
+        if grid[loc[0], loc[1]] != 1:
+            return True
+
+    return False
+
+def loc_to_action(current_loc, next_loc):
+    adjacent_locs = get_adjacent_locs(current_loc)
+
+    for i in range(len(adjacent_locs)):
+        if adjacent_locs[i][0] == next_loc[0] and adjacent_locs[i][1] == next_loc[1]:
+            return i
+
+def loc_online_inbetween(loc, source, target):
+    dxc = loc[0] - source[0]
+    dyc = loc[1] - source[1]
+
+    dxl = target[0] - source[0]
+    dyl = target[1] - source[1]
+
+    cross = dxc * dyl - dyc * dxl
+
+    if cross == 0:
+        if abs(dxl) >= abs(dyl):
+            if dxl > 0:
+                return (source[0] <= loc[0]) & (loc[0] <= target[0])
+            else:
+                return (target[0] <= loc[0]) & (loc[0] <= source[0])
+        else:
+            if dyl > 0 :
+                return (source[1] <= loc[1]) & (loc[1] <= target[1])
+            else:
+                return (target[1] <= loc[1]) & (loc[1] <= source[1])
+    else:
+        return False
 
 def sim_loader(path):
     img = cv2.imread(path)
