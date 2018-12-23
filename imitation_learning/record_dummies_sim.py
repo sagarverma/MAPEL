@@ -1,13 +1,11 @@
 import sys
-sys.path.append('../utils')
-from graph import NxGraph
-from dataloder import *
-
 sys.path.append('../environments')
 from env import Environment
 from agent import Invader, Guard, Target, Agent
 
-
+sys.path.append('../utils')
+from dataloader import *
+from graph import NxGraph
 
 import argparse
 import multiprocessing
@@ -106,7 +104,7 @@ class DummyGuard(Guard):
         return new_loc
 
 for phase in ['train','test']:
-    fout = open('../dataset/dummies_bfs/' + phase + '.csv', 'wb')
+    fout = open('../dataset/dummies_bfs/' + phase + '.csv', 'w')
     w = csv.writer(fout)
 
     obs_no = 1

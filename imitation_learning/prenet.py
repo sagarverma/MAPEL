@@ -1,4 +1,7 @@
-from __future__ import print_function, division
+import sys
+sys.path.append('../utils')
+from dataloader import SimImagePreloader
+
 import shutil
 import torch
 import torch.nn as nn
@@ -15,8 +18,6 @@ from torchvision import datasets, models, transforms
 import matplotlib.pyplot as plt
 import time
 import os
-
-from utils.folder import SimImagePreloader
 
 use_gpu = torch.cuda.is_available()
 DEVICE = 0
@@ -36,10 +37,10 @@ num_workers = 4
 #dataset_name = 'intelligent_bfs'
 dataset_name = 'dummies_bfs'
 
-data_dir = 'dataset/' + dataset_name + '/'
-weights_dir = 'weights/'
-train_csv = 'dataset/' + dataset_name + '/train.csv'
-test_csv = 'dataset/' + dataset_name + '/test.csv'
+data_dir = '../dataset/' + dataset_name + '/'
+weights_dir = '../weights/'
+train_csv = '../dataset/' + dataset_name + '/train.csv'
+test_csv = '../dataset/' + dataset_name + '/test.csv'
 
 class SimpleNet(nn.Module):
     def __init__(self):
