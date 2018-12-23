@@ -71,7 +71,7 @@ class Environment(object):
             self.done = False
             self.wins = None
 
-        return self.grid
+        return self._featurize()
 
 
     def get_json_info(self):
@@ -154,9 +154,9 @@ class Environment(object):
 
         self.step_count += 1
 
-        return self.grid, self._get_rewards(), self.done, self.get_json_info()
+        return self._featurize(), self._get_rewards(), self.done, self.get_json_info()
 
-    def render(self):
+    def _featurize(self):
         img = np.zeros((self.grid.shape[0], self.grid.shape[1], 3))
         img[self.grid == 1] = [255, 255, 255]
         img[self.grid == 7] = [255, 0, 0]
@@ -170,7 +170,10 @@ class Environment(object):
             invader_observation = self.invader.get_observed_environment(self.grid)
             img[invader_observation == 0] = [128,5,5]
 
-        plt.imshow(img.astype(np.uint8))
+        return img.astype(np.uint8)
+
+    def render(self):
+        plt.imshow(self_featurize())
         plt.pause(self.sim_speed)
         plt.draw()
 

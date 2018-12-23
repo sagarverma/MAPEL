@@ -1,355 +1,232 @@
-
+import sys
+import pickle
+import numpy as np
+from collections import namedtuple
+from itertools import count
 import random
-import math
+
 import torch
 import torch.nn as nn
-import torch.optim as optim
-from torch.autograd import Variable
 import torch.nn.functional as F
-import matplotlib.pyplot as plt
-from multi_env import *
-from multi_agent import *
+import torch.autograd as autograd
+import torch.optim as optim
 
-# hyper parameters
-EPISODES = 200  # number of episodes
-EPS_START = 0.9  # e-greedy threshold start value
-EPS_END = 0.05  # e-greedy threshold end value
-EPS_DECAY = 200  # e-greedy threshold decay
-GAMMA = 0.8  # Q-learning discount factor
-LR = 0.001  # NN optimizer learning rate
-HIDDEN_LAYER = 256  # NN hidden layer size
-BATCH_SIZE = 64  # Q-learning batch size
-num_agents = 2
+sys.path.append('../environments')
+from env import *
+from agent import *
 
-# if gpu is to be used
-use_cuda = torch.cuda.is_available()
-FloatTensor = torch.cuda.FloatTensor if use_cuda else torch.FloatTensor
-LongTensor = torch.cuda.LongTensor if use_cuda else torch.LongTensor
-ByteTensor = torch.cuda.ByteTensor if use_cuda else torch.ByteTensor
-Tensor = FloatTensor
+sys.path.append('../utils')
+from replay_buffer import ReplayBuffer
+from schedule import LinearSchedule
+from dataloader import action_to_loc, valid_loc
 
-def action_to_loc(current_loc, action):
-    return get_adjacent_locs(current_loc)[action]
+from models import DQN
 
-def valid_loc(grid, loc):
-    if loc[0] > 0 and loc[1] > 0 and loc[0] < grid.shape[0] and loc[1] < grid.shape[1]:
-        if grid[loc[0], loc[1]] != 1:
-            return True
+USE_CUDA = torch.cuda.is_available()
+dtype = torch.cuda.FloatTensor if torch.cuda.is_available() else torch.FloatTensor
 
-    return False
+BATCH_SIZE = 32
+GAMMA = 0.99
+REPLAY_BUFFER_SIZE = 1000000
+LEARNING_STARTS = 50000
+LEARNING_FREQ = 4
+FRAME_HISTORY_LEN = 4
+TARGER_UPDATE_FREQ = 10000
+LEARNING_RATE = 0.00025
+ALPHA = 0.95
+EPS = 0.01
+IMG_H = 32
+IMG_W = 32
+IMG_C = 5
+NUM_ACTIONS = 9
 
-def get_adjacent_locs(current_loc):
-    adjacent_locs = [[current_loc[0] - 1, current_loc[1] - 1],
-                    [current_loc[0] - 1, current_loc[1]],
-                    [current_loc[0] - 1, current_loc[1] + 1],
-                    [current_loc[0], current_loc[1] - 1],
-                    current_loc,
-                    [current_loc[0], current_loc[1] + 1],
-                    [current_loc[0] + 1, current_loc[1] - 1],
-                    [current_loc[0] + 1, current_loc[1]],
-                    [current_loc[0] + 1, current_loc[1] + 1]]
-    return adjacent_locs
-
-# class NEnvironment(Environment):
-#     def __init__(self, *args, **kwargs):
-#         super(NEnvironment, self).__init__(*args, **kwargs)
-#
-#     def act(self):
-#         """
-#         Invader and guard act inside environment. Invader and guard new positions are updated.
-#         """
-#         invaders_actions = {}
-#         for invader in self.invaders.values():
-#             invaders_actions[invader.id] = invader.act(self)
-#
-#         guards_actions = {}
-#         # for guard in self.guards.values():
-#         #     guards_actions[guard.id] = guard.act(self)
-#
-#         return guards_actions, invaders_actions
-
-class DQNGuard(Guard):
+class NEnvironment(Environment):
     def __init__(self, *args, **kwargs):
-        super(DQNGuard, self).__init__(*args, **kwargs)
+        super(NEnvironment, self).__init__(*args, **kwargs)
 
-    def act(self, environment, action):
-        new_loc = action_to_loc(self.loc, action)
-        if valid_loc(environment.grid, new_loc) and new_loc[0] != self.loc[0] and new_loc[1] != self.loc[1]:
-            return new_loc
+    def act(self, action):
+        """
+        Invader and guard act inside environment. Invader and guard new positions are updated.
+        """
 
-        return self.loc
+        if valid_loc(self.grid, action_to_loc(self.invader.loc, action)):
+            invader_action = action_to_loc(self.invader.loc, action)
+        else:
+            invader_action = self.invader.loc
+        guard_action = self.guard.act(self.grid, self.invader, self.target)
 
-class DQNInvader(Invader):
+        return guard_action, invader_action
+
+class NGuard(Guard):
     def __init__(self, *args, **kwargs):
-        super(DQNInvader, self).__init__(*args, **kwargs)
+        super(NGuard, self).__init__(*args, **kwargs)
 
-    def act(self, environment, action):
-        new_loc = action_to_loc(self.loc, action)
-        if valid_loc(environment.grid, new_loc) and new_loc[0] != self.loc[0] and new_loc[1] != self.loc[1]:
-            return new_loc
+    def act(self, environment, target1, target2):
+        """
+        Guard moves to target or invader based on who is closest.
+        """
+        graph = NxGraph()
+        graph.grid_to_graph(environment)
+        shortest_path1 = graph.shortest_path((self.loc[0], self.loc[1]), (target1.loc[0], target1.loc[1]))
+        shortest_path2 = graph.shortest_path((self.loc[0], self.loc[1]), (target2.loc[0], target2.loc[1]))
 
-        return self.loc
+        if len(shortest_path1) <= len(shortest_path2):
+            if len(shortest_path1) <= self.speed:
+                return [shortest_path1[-1][0], shortest_path1[-1][1]]
+            else:
+                return [shortest_path1[self.speed][0], shortest_path1[self.speed][1]]
+        else:
+            if len(shortest_path2) <= self.speed:
+                return [shortest_path2[-1][0], shortest_path2[-1][1]]
+            else:
+                return [shortest_path2[self.speed][0], shortest_path2[self.speed][1]]
 
-class ReplayMemory:
-    def __init__(self, capacity):
-        self.capacity = capacity
-        self.memory = []
+# Construct an epilson greedy policy with given exploration schedule
+def select_epilson_greedy_action(model, obs, t):
+    sample = random.random()
+    eps_threshold = exploration.value(t)
+    if sample > eps_threshold:
+        obs = torch.from_numpy(obs).type(dtype).unsqueeze(0) / 255.0
+        # Use volatile = True if variable is only used in inference mode, i.e. don’t save the history
+        return model(Variable(obs, volatile=True)).data.max(1)[1].cpu()
+    else:
+        return torch.IntTensor([[random.randrange(NUM_ACTIONS)]])
 
-    def push(self, transition):
-        self.memory.append(transition)
-        if len(self.memory) > self.capacity:
-            del self.memory[0]
+class Variable(autograd.Variable):
+    def __init__(self, data, *args, **kwargs):
+        if USE_CUDA:
+            data = data.cuda()
+        super(Variable, self).__init__(data, *args, **kwargs)
 
-    def sample(self, batch_size):
-        return random.sample(self.memory, batch_size)
+"""
+    OptimizerSpec containing following attributes
+        constructor: The optimizer constructor ex: RMSprop
+        kwargs: {Dict} arguments for constructing optimizer
+"""
+OptimizerSpec = namedtuple("OptimizerSpec", ["constructor", "kwargs"])
 
-    def __len__(self):
-        return len(self.memory)
+Statistic = {
+    "mean_episode_rewards": [],
+    "best_mean_episode_rewards": []
+}
 
 
-class CNNet(nn.Module):
-    def __init__(self, in_channels=5, num_actions=9):
-        super(CNNet, self).__init__()
-        self.conv1 = nn.Conv2d(in_channels, 64, kernel_size=7)
-        self.conv2 = nn.Conv2d(64, 128, kernel_size=5)
-        self.conv3 = nn.Conv2d(128, 256, kernel_size=3)
-        self.conv3_drop = nn.Dropout2d()
-        self.fc2 = nn.Linear(256, num_actions)
+optimizer_spec = OptimizerSpec(
+        constructor=optim.RMSprop,
+        kwargs=dict(lr=LEARNING_RATE, alpha=ALPHA, eps=EPS),
+    )
 
-    def forward(self, x):
-        x = F.relu(F.max_pool2d(self.conv1(x), 2))
-        x = F.relu(F.max_pool2d(self.conv2(x), 2))
-        x = F.relu(F.max_pool2d(self.conv3_drop(self.conv3(x)), 2))
-        #print(x.size())
-        x = x.view(-1, 256)
-        x = F.relu(self.fc2(x))
-        return x
+exploration_schedule = LinearSchedule(1000000, 0.1)
 
-class FeatNet(nn.Module):
-    def __init__(self):
-        super(FeatNet, self).__init__()
-        nn.Module.__init__(self)
-        self.l1 = nn.Linear(500, 1024)
-        self.l2 = nn.Linear(1024, 256)
-        self.l3 = nn.Linear(256, 32)
-
-    def forward(self, x):
-        x = F.relu(self.l1(x))
-        x = F.relu(self.l2(x))
-        x = F.relu(self.l3(x))
-        return x
-
-class SRPNet(nn.Module):
-    def __init__(self, num_agents):
-        super(SRPNet, self).__init__()
-        self.num_agents = num_agents
-
-        self.feature = FeatNet()
-
-        self.ll1 = nn.Linear(num_agents + 1, 32)
-        self.rnn = nn.RNNCell(64, 32)
-        self.ll2 = nn.Linear(32, 9)
-
-    def forward(self, inp, vis, hid):
-        feature = self.feature(inp)
-
-        ll1_out = self.ll1(vis)
-        rnn_inp = torch.cat([feature, ll1_out], dim=1)
-        out = self.rnn(rnn_inp)
-        ll2_out = self.ll2(out)
-
-        return out, ll2_out
-
-invader1 = DQNInvader(id=80, speed=1, obs_size=5)
-invader2 = DQNInvader(id=81, speed=1, obs_size=5)
-guard1 = DQNGuard(id=70, speed=1, obs_size=5)
-guard2 = DQNGuard(id=71, speed=1, obs_size=5)
+# Build Environment
+invader = Invader(speed=1)
+guard = NGuard(speed=1)
 target = Target(speed=0)
 
-env = Environment([32,32], [guard1, guard2], [invader1, invader2], target, sim_speed=0.0001)
+env = NEnvironment([32,32], guard, invader, target)
 
-invader_models = {80: CNNet(), 81: CNNet()}
-guard_models = {70: CNNet(), 71: CNNet()}
+# Initialize target q function and q function
+Q = DQN(FRAME_HISTORY_LEN * IMG_C, NUM_ACTIONS).type(dtype)
+target_Q = DQN(FRAME_HISTORY_LEN * IMG_C, NUM_ACTIONS).type(dtype)
 
-if use_cuda:
-    for invader_model in invader_models.values():
-        invader_model.cuda()
-    for guard_model in guard_models.values():
-        guard_model.cuda()
+# Construct Q network optimizer function
+optimizer = optimizer_spec.constructor(Q.parameters(), **optimizer_spec.kwargs)
 
-invader_memories = {80: ReplayMemory(10000), 81: ReplayMemory(10000)}
-guard_memories = {70: ReplayMemory(10000), 71: ReplayMemory(10000)}
+# Construct the replay buffer
+replay_buffer = ReplayBuffer(REPLAY_BUFFER_SIZE, FRAME_HISTORY_LEN)
 
-invader_optimizers = {80: optim.Adam(invader_models[80].parameters(), LR), 81: optim.Adam(invader_models[81].parameters(), LR)}
-guard_optimizers = {70: optim.Adam(guard_models[70].parameters(), LR), 71: optim.Adam(guard_models[71].parameters(), LR)}
+###############
+# RUN ENV     #
+###############
+num_param_updates = 0
+mean_episode_reward = -float('nan')
+best_mean_episode_reward = -float('inf')
+last_obs = env.reset()
+LOG_EVERY_N_STEPS = 10000
+episodes_rewards = []
 
-steps_done = 0
-episode_durations = []
+for t in count():
+    ### Step the env and store the transition
+    # Store lastest observation in replay memory and last_idx can be used to store action, reward, done
+    last_idx = replay_buffer.store_frame(last_obs)
+    # encode_recent_observation will take the latest observation
+    # that you pushed into the buffer and compute the corresponding
+    # input that should be given to a Q network by appending some
+    # previous frames.
+    recent_observations = replay_buffer.encode_recent_observation()
 
-
-def select_action(model, state):
-    global steps_done
-    sample = random.random()
-    eps_threshold = EPS_END + (EPS_START - EPS_END) * math.exp(-1. * steps_done / EPS_DECAY)
-    steps_done += 1
-    if sample > eps_threshold:
-        return model(Variable(state, volatile=True).type(FloatTensor)).data.max(1)[1].view(1, 1)
+    # Choose random action if not yet start learning
+    if t > LEARNING_STARTS:
+        action = select_epilson_greedy_action(Q, recent_observations, t)[0, 0]
     else:
-        return LongTensor([[random.randrange(9)]])
+        action = random.randrange(NUM_ACTIONS)
 
+    guard_action, invader_action = env.act(action)
+    # Advance one step
+    obs, reward, done, _ = env.step(guard_action, invader_action)
+    # clip rewards between -1 and 1
+    reward = -1 * reward
+    reward = max(-1.0, min(reward, 1.0))
+    # Store other info in replay memory
+    replay_buffer.store_effect(last_idx, action, reward, done)
+    # Resets the environment when reaching an episode boundary.
+    if done:
+        obs = env.reset()
+        episodes_rewards.append(reward)
+        if len(episodes_rewards) % 100 == 0:
+            print (np.mean(episode_rewards), end=',')
 
-def run_episode(e, environment):
-    obs = environment.reset()
+    last_obs = obs
 
-    invader_states = {}
-    for invader in environment.invaders.values():
-        invader_states[invader.id] = invader.get_full_feat(environment)
+    ### Perform experience replay and train the network.
+    # Note that this is only done if the replay buffer contains enough samples
+    # for us to learn something useful -- until then, the model will not be
+    # initialized and random actions should be taken
+    if (t > LEARNING_STARTS and
+            t % learning_freq == 0 and
+            replay_buffer.can_sample(batch_size)):
+        # Use the replay buffer to sample a batch of transitions
+        # Note: done_mask[i] is 1 if the next state corresponds to the end of an episode,
+        # in which case there is no Q-value at the next state; at the end of an
+        # episode, only the current state reward contributes to the target
+        obs_batch, act_batch, rew_batch, next_obs_batch, done_mask = replay_buffer.sample(batch_size)
+        # Convert numpy nd_array to torch variables for calculation
+        obs_batch = Variable(torch.from_numpy(obs_batch).type(dtype) / 255.0)
+        act_batch = Variable(torch.from_numpy(act_batch).long())
+        rew_batch = Variable(torch.from_numpy(rew_batch))
+        next_obs_batch = Variable(torch.from_numpy(next_obs_batch).type(dtype) / 255.0)
+        not_done_mask = Variable(torch.from_numpy(1 - done_mask)).type(dtype)
 
-    guard_states = {}
-    for guard in environment.guards.values():
-        guard_states[guard.id] = guard.get_full_feat(environment)
+        if USE_CUDA:
+            act_batch = act_batch.cuda()
+            rew_batch = rew_batch.cuda()
 
-    steps = 0
+        # Compute current Q value, q_func takes only state and output value for every state-action pair
+        # We choose Q based on action taken.
+        current_Q_values = Q(obs_batch).gather(1, act_batch.unsqueeze(1))
+        # Compute next Q value based on which action gives max Q values
+        # Detach variable from the current graph since we don't want gradients for next Q to propagated
+        next_max_q = target_Q(next_obs_batch).detach().max(1)[0]
+        next_Q_values = not_done_mask * next_max_q
+        # Compute the target of the current Q values
+        target_Q_values = rew_batch + (gamma * next_Q_values)
+        # Compute Bellman error
+        bellman_error = target_Q_values - current_Q_values
+        # clip the bellman error between [-1 , 1]
+        clipped_bellman_error = bellman_error.clamp(-1, 1)
+        # Note: clipped_bellman_delta * -1 will be right gradient
+        d_error = clipped_bellman_error * -1.0
+        # Clear previous gradients before backward pass
+        optimizer.zero_grad()
+        # run backward pass
+        current_Q_values.backward(d_error.data.unsqueeze(1))
 
-    while True:
-        #environment.render()
-        invader_actions = {}
-        for invader in invader_models.keys():
-            invader_actions[invader] = select_action(invader_models[invader], FloatTensor([invader_states[invader]]))
+        # Perfom the update
+        optimizer.step()
+        num_param_updates += 1
 
-        guard_actions = {}
-        for guard in guard_models.keys():
-            guard_actions[guard] = select_action(guard_models[guard], FloatTensor([guard_states[guard]]))
+        # Periodically update the target network by Q network to target Q network
+        if num_param_updates % target_update_freq == 0:
+            target_Q.load_state_dict(Q.state_dict())
 
-        invader_action_locs = {}
-        for invader in environment.invaders.values():
-            invader_action_locs[invader.id] = invader.act(environment, invader_actions[invader.id])
-
-        guard_action_locs = {}
-        for guard in environment.guards.values():
-            guard_action_locs[guard.id] = guard.act(environment, guard_actions[guard.id])
-
-        next_state, rewards, done = environment.step(guard_action_locs, invader_action_locs)
-        environment.render()
-
-        invader_next_states = {}
-        for invader in environment.invaders.values():
-            invader_next_states[invader.id] = invader.get_full_feat(environment)
-
-        guard_next_states = {}
-        for guard in environment.guards.values():
-            guard_next_states[guard.id] = guard.get_full_feat(environment)
-
-
-        for invader in invader_memories.keys():
-            invader_memories[invader].push((FloatTensor([invader_states[invader]]),
-                         invader_actions[invader],  # action is already a tensor
-                         FloatTensor([invader_next_states[invader]]),
-                         FloatTensor([rewards[1][invader]])))
-
-        for guard in guard_memories.keys():
-            guard_memories[guard].push((FloatTensor([guard_states[guard]]),
-                         guard_actions[guard],  # action is already a tensor
-                         FloatTensor([guard_next_states[guard]]),
-                         FloatTensor([rewards[0][guard]])))
-
-        for invader in invader_models.keys():
-            invader_learn(invader)
-
-        for guard in guard_models.keys():
-            guard_learn(guard)
-
-        invader_states = {}
-        for invader in invader_next_states.keys():
-            invader_states[invader] = invader_next_states[invader]
-
-        guard_states = {}
-        for guard in guard_next_states.keys():
-            guard_states[guard] = guard_next_states[guard]
-
-        steps += 1
-
-        if done:
-            print rewards, environment.wins
-            episode_durations.append(steps)
-            #plot_durations()
-            break
-
-
-def guard_learn(guard):
-    if len(guard_memories[guard]) < BATCH_SIZE:
-        return
-
-    # random transition batch is taken from experience replay memory
-    transitions = guard_memories[guard].sample(BATCH_SIZE)
-    batch_state, batch_action, batch_next_state, batch_reward = zip(*transitions)
-
-    batch_state = Variable(torch.cat(batch_state))
-    batch_action = Variable(torch.cat(batch_action))
-    batch_reward = Variable(torch.cat(batch_reward))
-    batch_next_state = Variable(torch.cat(batch_next_state))
-
-    # current Q values are estimated by NN for all actions
-    current_q_values = guard_models[guard](batch_state).gather(1, batch_action)
-    # expected Q values are estimated from actions which gives maximum Q value
-    max_next_q_values = guard_models[guard](batch_next_state).detach().max(1)[0]
-    expected_q_values = batch_reward + (GAMMA * max_next_q_values)
-
-    # loss is measured from error between current and newly expected Q values
-    loss = F.smooth_l1_loss(current_q_values.view(-1), expected_q_values)
-
-    # backpropagation of loss to NN
-    guard_optimizers[guard].zero_grad()
-    loss.backward()
-    guard_optimizers[guard].step()
-
-def invader_learn(invader):
-    if len(invader_memories[invader]) < BATCH_SIZE:
-        return
-
-    # random transition batch is taken from experience replay memory
-    transitions = invader_memories[invader].sample(BATCH_SIZE)
-    batch_state, batch_action, batch_next_state, batch_reward = zip(*transitions)
-
-    batch_state = Variable(torch.cat(batch_state))
-    batch_action = Variable(torch.cat(batch_action))
-    batch_reward = Variable(torch.cat(batch_reward))
-    batch_next_state = Variable(torch.cat(batch_next_state))
-
-    # current Q values are estimated by NN for all actions
-    current_q_values = invader_models[invader](batch_state).gather(1, batch_action)
-    # expected Q values are estimated from actions which gives maximum Q value
-    max_next_q_values = invader_models[invader](batch_next_state).detach().max(1)[0]
-    expected_q_values = batch_reward + (GAMMA * max_next_q_values)
-
-    # loss is measured from error between current and newly expected Q values
-    loss = F.smooth_l1_loss(current_q_values.view(-1), expected_q_values)
-
-    # backpropagation of loss to NN
-    invader_optimizers[invader].zero_grad()
-    loss.backward()
-    invader_optimizers[invader].step()
-
-def plot_durations():
-    plt.figure(2)
-    plt.clf()
-    durations_t = torch.FloatTensor(episode_durations)
-    plt.title('Training...')
-    plt.xlabel('Episode')
-    plt.ylabel('Duration')
-    plt.plot(durations_t.numpy())
-    # take 100 episode averages and plot them too
-    if len(durations_t) >= 100:
-        means = durations_t.unfold(0, 100, 1).mean(1).view(-1)
-        means = torch.cat((torch.zeros(99), means))
-        plt.plot(means.numpy())
-
-    plt.pause(0.001)  # pause a bit so that plots are updated
-
-
-for e in range(EPISODES):
-    run_episode(e, env)
-
-print('Complete')
-# plt.ioff()
-# plt.show()
+print (np.mean(episodes_rewards))
