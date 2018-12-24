@@ -173,7 +173,7 @@ class Environment(object):
         return img.astype(np.uint8)
 
     def render(self):
-        plt.imshow(self_featurize())
+        plt.imshow(self._featurize())
         plt.pause(self.sim_speed)
         plt.draw()
 

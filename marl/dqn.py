@@ -25,7 +25,7 @@ from models import DQN
 USE_CUDA = torch.cuda.is_available()
 dtype = torch.cuda.FloatTensor if torch.cuda.is_available() else torch.FloatTensor
 
-BATCH_SIZE = 32
+BATCH_SIZE = 2048
 GAMMA = 0.99
 REPLAY_BUFFER_SIZE = 1000000
 LEARNING_STARTS = 50000
@@ -37,7 +37,7 @@ ALPHA = 0.95
 EPS = 0.01
 IMG_H = 32
 IMG_W = 32
-IMG_C = 5
+IMG_C = 3
 NUM_ACTIONS = 9
 
 class NEnvironment(Environment):
@@ -81,16 +81,6 @@ class NGuard(Guard):
             else:
                 return [shortest_path2[self.speed][0], shortest_path2[self.speed][1]]
 
-# Construct an epilson greedy policy with given exploration schedule
-def select_epilson_greedy_action(model, obs, t):
-    sample = random.random()
-    eps_threshold = exploration.value(t)
-    if sample > eps_threshold:
-        obs = torch.from_numpy(obs).type(dtype).unsqueeze(0) / 255.0
-        # Use volatile = True if variable is only used in inference mode, i.e. don’t save the history
-        return model(Variable(obs, volatile=True)).data.max(1)[1].cpu()
-    else:
-        return torch.IntTensor([[random.randrange(NUM_ACTIONS)]])
 
 class Variable(autograd.Variable):
     def __init__(self, data, *args, **kwargs):
@@ -118,6 +108,17 @@ optimizer_spec = OptimizerSpec(
 
 exploration_schedule = LinearSchedule(1000000, 0.1)
 
+# Construct an epilson greedy policy with given exploration schedule
+def select_epilson_greedy_action(model, obs, t):
+    sample = random.random()
+    eps_threshold = exploration_schedule.value(t)
+    if sample > eps_threshold:
+        obs = torch.from_numpy(obs).type(dtype).unsqueeze(0) / 255.0
+        # Use volatile = True if variable is only used in inference mode, i.e. don't save the history
+        return model(Variable(obs, volatile=True)).data.max(1)[1].cpu()
+    else:
+        return torch.IntTensor([[random.randrange(NUM_ACTIONS)]])
+    
 # Build Environment
 invader = Invader(speed=1)
 guard = NGuard(speed=1)
@@ -157,7 +158,7 @@ for t in count():
 
     # Choose random action if not yet start learning
     if t > LEARNING_STARTS:
-        action = select_epilson_greedy_action(Q, recent_observations, t)[0, 0]
+        action = select_epilson_greedy_action(Q, recent_observations, t).item()
     else:
         action = random.randrange(NUM_ACTIONS)
 
@@ -166,15 +167,15 @@ for t in count():
     obs, reward, done, _ = env.step(guard_action, invader_action)
     # clip rewards between -1 and 1
     reward = -1 * reward
-    reward = max(-1.0, min(reward, 1.0))
+#     reward = max(-1.0, min(reward, 1.0))
     # Store other info in replay memory
     replay_buffer.store_effect(last_idx, action, reward, done)
     # Resets the environment when reaching an episode boundary.
     if done:
         obs = env.reset()
         episodes_rewards.append(reward)
-        if len(episodes_rewards) % 100 == 0:
-            print (np.mean(episode_rewards), end=',')
+        if len(episodes_rewards) % 1000 == 0:
+            print (np.mean(episodes_rewards))
 
     last_obs = obs
 
@@ -183,13 +184,13 @@ for t in count():
     # for us to learn something useful -- until then, the model will not be
     # initialized and random actions should be taken
     if (t > LEARNING_STARTS and
-            t % learning_freq == 0 and
-            replay_buffer.can_sample(batch_size)):
+            t % LEARNING_FREQ == 0 and
+            replay_buffer.can_sample(BATCH_SIZE)):
         # Use the replay buffer to sample a batch of transitions
         # Note: done_mask[i] is 1 if the next state corresponds to the end of an episode,
         # in which case there is no Q-value at the next state; at the end of an
         # episode, only the current state reward contributes to the target
-        obs_batch, act_batch, rew_batch, next_obs_batch, done_mask = replay_buffer.sample(batch_size)
+        obs_batch, act_batch, rew_batch, next_obs_batch, done_mask = replay_buffer.sample(BATCH_SIZE)
         # Convert numpy nd_array to torch variables for calculation
         obs_batch = Variable(torch.from_numpy(obs_batch).type(dtype) / 255.0)
         act_batch = Variable(torch.from_numpy(act_batch).long())
@@ -203,13 +204,13 @@ for t in count():
 
         # Compute current Q value, q_func takes only state and output value for every state-action pair
         # We choose Q based on action taken.
-        current_Q_values = Q(obs_batch).gather(1, act_batch.unsqueeze(1))
+        current_Q_values = Q(obs_batch).gather(1, act_batch.unsqueeze(1)).view(-1)
         # Compute next Q value based on which action gives max Q values
         # Detach variable from the current graph since we don't want gradients for next Q to propagated
         next_max_q = target_Q(next_obs_batch).detach().max(1)[0]
         next_Q_values = not_done_mask * next_max_q
         # Compute the target of the current Q values
-        target_Q_values = rew_batch + (gamma * next_Q_values)
+        target_Q_values = rew_batch + (GAMMA * next_Q_values)
         # Compute Bellman error
         bellman_error = target_Q_values - current_Q_values
         # clip the bellman error between [-1 , 1]
@@ -219,14 +220,14 @@ for t in count():
         # Clear previous gradients before backward pass
         optimizer.zero_grad()
         # run backward pass
-        current_Q_values.backward(d_error.data.unsqueeze(1))
+        current_Q_values.backward(d_error.data)
 
         # Perfom the update
         optimizer.step()
         num_param_updates += 1
 
         # Periodically update the target network by Q network to target Q network
-        if num_param_updates % target_update_freq == 0:
+        if num_param_updates % TARGER_UPDATE_FREQ == 0:
             target_Q.load_state_dict(Q.state_dict())
 
 print (np.mean(episodes_rewards))
