@@ -109,11 +109,8 @@ def featurize(obs):
 # rewards = []
 
 for phase in ['train','test']:
-    fout = open('../dataset/intelligent_bfs/' + phase + '.csv', 'w')
-    w = csv.writer(fout)
 
-    obs_no = 1
-    for i in range(1):
+    for i in range(5000):
         invader = Invader(speed=1)
         guard = NGuard(speed=1)
         target = Target(speed=0)
@@ -122,23 +119,26 @@ for phase in ['train','test']:
 
         done = False
 
+        runs = []
+        guard_actions = []
+        invader_actions = []
+        rewards = []
         while not done:
             guard_current_loc = env.guard.loc
             invader_current_loc = env.invader.loc
             current_obs = env.grid
             guard_action, invader_action = env.act()
             obs, reward, done, info = env.step(guard_action, invader_action)
-            # observations.append(featurize(current_obs))
-            # actions.append(loc_to_action(guard_current_loc, guard_action))
-            # rewards.append(reward)
-            img = np.zeros((32,32,3))
-            img[obs == 1] = [255, 255, 255]
-            img[obs == 7] = [255, 0, 0]
-            img[obs == 8] = [0, 255, 0]
-            img[obs == 9] = [0, 0, 255]
-            cv2.imwrite('../dataset/intelligent_bfs/' + phase + '/' + str(obs_no).zfill(10) + '.png', img)
-            w.writerow([str(obs_no).zfill(10) + '.png', loc_to_action(guard_current_loc, guard_action)])
-            obs_no += 1
-    # fout = open('dataset/intelligent_bfs/sim.pkl', "wb")
-    # pickle.dump({'observations':observations, 'actions':actions, 'rewards':rewards}, fout)
-    fout.close()
+            runs.append(obs)
+            guard_actions.append(guard_action)
+            invader_actions.append(invader_action)
+            rewards.append(reward)
+
+
+        runs = np.asarray(runs)
+        guard_actions = np.asarray(guard_actions)
+        invader_actions = np.asarray(invader_actions)
+        rewards = np.asarray(rewards)
+        np.savez_compressed('../dataset/intelligent_bfs/' + phase + '_run_'  + str(i).zfill(10) + '.npz',
+                            runs=runs, guard_actions=guard_actions, invader_actions=invader_actions, rewards=rewards)
+
