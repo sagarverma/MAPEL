@@ -38,9 +38,6 @@ class Environment(object):
         self._spawn_agents()
 
 
-        self._init_game_state = self.get_json_info()
-
-
     def _spawn_agents(self):
         """
         Place agents in the environment
@@ -56,20 +53,17 @@ class Environment(object):
 
     def reset(self):
 
-        if self._init_game_state is not None:
-            self.set_json_info()
+        if self.fixed_grid:
+            self.grid = np.load('fixed_grid.npy')
         else:
-            if self.fixed_grid:
-                self.grid = np.load('fixed_grid.npy')
-            else:
-                dungeon = dungeonGenerator(*self.grid_size)
-                dungeon.placeRandomRooms(2, 10, 5, 2)
-                self.grid = np.asarray(dungeon.grid)
+            dungeon = dungeonGenerator(*self.grid_size)
+            dungeon.placeRandomRooms(2, 10, 5, 2)
+            self.grid = np.asarray(dungeon.grid)
 
-            self._spawn_agents()
-            self.step_count = 0
-            self.done = False
-            self.wins = None
+        self._spawn_agents()
+        self.step_count = 0
+        self.done = False
+        self.wins = None
 
         return self._featurize()
 
@@ -176,4 +170,6 @@ class Environment(object):
         plt.imshow(self._featurize())
         plt.pause(self.sim_speed)
         plt.draw()
+        
+        
 

@@ -5,6 +5,8 @@ from collections import namedtuple
 from itertools import count
 import random
 
+import visdom 
+
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -18,7 +20,7 @@ from agent import *
 sys.path.append('../utils')
 from replay_buffer import ReplayBuffer
 from schedule import LinearSchedule
-from dataloader import action_to_loc, valid_loc
+from dataloader import action_to_loc, valid_loc, loc_to_action
 
 from models import DQN
 
@@ -28,11 +30,11 @@ dtype = torch.cuda.FloatTensor if torch.cuda.is_available() else torch.FloatTens
 BATCH_SIZE = 2048
 GAMMA = 0.99
 REPLAY_BUFFER_SIZE = 1000000
-LEARNING_STARTS = 50000
+LEARNING_STARTS = 50
 LEARNING_FREQ = 4
 FRAME_HISTORY_LEN = 4
 TARGER_UPDATE_FREQ = 10000
-LEARNING_RATE = 0.00025
+LEARNING_RATE = 0.01
 ALPHA = 0.95
 EPS = 0.01
 IMG_H = 32
@@ -44,15 +46,18 @@ class NEnvironment(Environment):
     def __init__(self, *args, **kwargs):
         super(NEnvironment, self).__init__(*args, **kwargs)
 
-    def act(self, action):
+    def act(self, action=None):
         """
         Invader and guard act inside environment. Invader and guard new positions are updated.
         """
-
-        if valid_loc(self.grid, action_to_loc(self.invader.loc, action)):
-            invader_action = action_to_loc(self.invader.loc, action)
+        
+        if action != None:
+            if valid_loc(self.grid, action_to_loc(self.invader.loc, action)):
+                invader_action = action_to_loc(self.invader.loc, action)
+            else:
+                invader_action = self.invader.loc
         else:
-            invader_action = self.invader.loc
+            invader_action = loc_to_action(self.invader.loc, self.invader.act(self.grid, self.target))
         guard_action = self.guard.act(self.grid, self.invader, self.target)
 
         return guard_action, invader_action
@@ -115,7 +120,7 @@ def select_epilson_greedy_action(model, obs, t):
     if sample > eps_threshold:
         obs = torch.from_numpy(obs).type(dtype).unsqueeze(0) / 255.0
         # Use volatile = True if variable is only used in inference mode, i.e. don't save the history
-        return model(Variable(obs, volatile=True)).data.max(1)[1].cpu()
+        return model(Variable(obs)).data.max(1)[1].cpu()
     else:
         return torch.IntTensor([[random.randrange(NUM_ACTIONS)]])
     
@@ -125,6 +130,8 @@ guard = NGuard(speed=1)
 target = Target(speed=0)
 
 env = NEnvironment([32,32], guard, invader, target)
+
+vis = visdom.Visdom(port=8124)
 
 # Initialize target q function and q function
 Q = DQN(FRAME_HISTORY_LEN * IMG_C, NUM_ACTIONS).type(dtype)
@@ -145,6 +152,7 @@ best_mean_episode_reward = -float('inf')
 last_obs = env.reset()
 LOG_EVERY_N_STEPS = 10000
 episodes_rewards = []
+episode_obs = [last_obs]
 
 for t in count():
     ### Step the env and store the transition
@@ -160,11 +168,13 @@ for t in count():
     if t > LEARNING_STARTS:
         action = select_epilson_greedy_action(Q, recent_observations, t).item()
     else:
-        action = random.randrange(NUM_ACTIONS)
-
+#         action = random.randrange(NUM_ACTIONS)
+        _, action = env.act()
+    
     guard_action, invader_action = env.act(action)
     # Advance one step
     obs, reward, done, _ = env.step(guard_action, invader_action)
+    episode_obs.append(cv2.resize(obs, (500,500), interpolation=cv2.INTER_AREA))
     # clip rewards between -1 and 1
     reward = -1 * reward
 #     reward = max(-1.0, min(reward, 1.0))
@@ -172,11 +182,18 @@ for t in count():
     replay_buffer.store_effect(last_idx, action, reward, done)
     # Resets the environment when reaching an episode boundary.
     if done:
-        obs = env.reset()
         episodes_rewards.append(reward)
-        if len(episodes_rewards) % 1000 == 0:
+        if len(episodes_rewards) % 100 == 0:
             print (np.mean(episodes_rewards))
-
+            
+            for img in episode_obs:
+                vis.image(img.transpose(2,0,1), win='1')
+                plt.pause(0.01)
+            vis.close('1')
+        episode_obs = []
+        
+        obs = env.reset()
+        
     last_obs = obs
 
     ### Perform experience replay and train the network.
