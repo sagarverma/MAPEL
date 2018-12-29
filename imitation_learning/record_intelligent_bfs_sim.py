@@ -54,31 +54,6 @@ class NGuard(Guard):
             else:
                 return [shortest_path2[self.speed][0], shortest_path2[self.speed][1]]
 
-def featurize(obs):
-    maps = []
-
-    nmap = np.zeros(obs.shape)
-    nmap[obs == 1] = 1
-    maps.append(nmap)
-
-    nmap = np.zeros(obs.shape)
-    nmap[obs == 7] = 1
-    maps.append(nmap)
-
-    nmap = np.zeros(obs.shape)
-    nmap[obs == 8] = 1
-    maps.append(nmap)
-
-    nmap = np.zeros(obs.shape)
-    nmap[obs == 9] = 1
-    maps.append(nmap)
-
-    return np.stack(maps, axis=2)
-
-# observations = []
-# actions = []
-# rewards = []
-
 for phase in ['train','test']:
 
     for i in range(20000):
