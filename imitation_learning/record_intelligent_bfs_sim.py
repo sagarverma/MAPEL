@@ -17,35 +17,6 @@ import matplotlib.pyplot as plt
 import numpy as np
 import csv
 
-def action_to_loc(current_loc, action):
-    return get_adjacent_locs(current_loc)[action]
-
-def loc_to_action(current_loc, next_loc):
-    adjacent_locs = get_adjacent_locs(current_loc)
-
-    for i in range(len(adjacent_locs)):
-        if adjacent_locs[i][0] == next_loc[0] and adjacent_locs[i][1] == next_loc[1]:
-            return i
-
-def valid_loc(grid, loc):
-    if loc[0] > 0 and loc[1] > 0 and loc[0] < grid.shape[0] and loc[1] < grid.shape[1]:
-        if grid[loc[0], loc[1]] != 1:
-            return True
-
-    return False
-
-def get_adjacent_locs(current_loc):
-    adjacent_locs = [[current_loc[0] - 1, current_loc[1] - 1],
-                    [current_loc[0] - 1, current_loc[1]],
-                    [current_loc[0] - 1, current_loc[1] + 1],
-                    [current_loc[0], current_loc[1] - 1],
-                    current_loc,
-                    [current_loc[0], current_loc[1] + 1],
-                    [current_loc[0] + 1, current_loc[1] - 1],
-                    [current_loc[0] + 1, current_loc[1]],
-                    [current_loc[0] + 1, current_loc[1] + 1]]
-    return adjacent_locs
-
 class NEnvironment(Environment):
     def __init__(self, *args, **kwargs):
         super(NEnvironment, self).__init__(*args, **kwargs)
@@ -110,7 +81,7 @@ def featurize(obs):
 
 for phase in ['train','test']:
 
-    for i in range(5000):
+    for i in range(20000):
         invader = Invader(speed=1)
         guard = NGuard(speed=1)
         target = Target(speed=0)
@@ -126,12 +97,12 @@ for phase in ['train','test']:
         while not done:
             guard_current_loc = env.guard.loc
             invader_current_loc = env.invader.loc
-            current_obs = env.grid
+            current_obs = env._featurize()
             guard_action, invader_action = env.act()
             obs, reward, done, info = env.step(guard_action, invader_action)
-            runs.append(obs)
-            guard_actions.append(guard_action)
-            invader_actions.append(invader_action)
+            runs.append(current_obs)
+            guard_actions.append(loc_to_action(guard_current_loc,guard_action))
+            invader_actions.append(loc_to_action(invader_current_loc,invader_action))
             rewards.append(reward)
 
 

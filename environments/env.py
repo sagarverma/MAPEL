@@ -24,7 +24,7 @@ class Environment(object):
             self.grid = np.load('fixed_grid.npy')
         else:
             dungeon = dungeonGenerator(*self.grid_size)
-            dungeon.placeRandomRooms(2, 10, 5, 2)
+            dungeon.placeRandomRooms(2, 10, 5, 3)
             self.grid = np.asarray(dungeon.grid)
 
         self.guard = guard
@@ -57,7 +57,7 @@ class Environment(object):
             self.grid = np.load('fixed_grid.npy')
         else:
             dungeon = dungeonGenerator(*self.grid_size)
-            dungeon.placeRandomRooms(2, 10, 5, 2)
+            dungeon.placeRandomRooms(2, 10, 5, 3)
             self.grid = np.asarray(dungeon.grid)
 
         self._spawn_agents()
