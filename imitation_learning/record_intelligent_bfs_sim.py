@@ -7,7 +7,7 @@ sys.path.append('../utils')
 from dataloader import *
 from graph import NxGraph
 
-from multiprocessing import Queue
+from multiprocessing import Queue, Pool
 import cv2
 import random
 from graph import NxGraph
@@ -54,37 +54,41 @@ class NGuard(Guard):
             else:
                 return [shortest_path2[self.speed][0], shortest_path2[self.speed][1]]
 
-for phase in ['train','test']:
 
-    for i in range(20000):
-        invader = Invader(speed=1)
-        guard = NGuard(speed=1)
-        target = Target(speed=0)
+def run_sim(name):
+    invader = Invader(speed=1)
+    guard = NGuard(speed=1)
+    target = Target(speed=0)
 
-        env = NEnvironment([32,32], guard, invader, target)
+    env = NEnvironment([32,32], guard, invader, target)
 
-        done = False
+    done = False
 
-        runs = []
-        guard_actions = []
-        invader_actions = []
-        rewards = []
-        while not done:
-            guard_current_loc = env.guard.loc
-            invader_current_loc = env.invader.loc
-            current_obs = env._featurize()
-            guard_action, invader_action = env.act()
-            obs, reward, done, info = env.step(guard_action, invader_action)
-            runs.append(current_obs)
-            guard_actions.append(loc_to_action(guard_current_loc,guard_action))
-            invader_actions.append(loc_to_action(invader_current_loc,invader_action))
-            rewards.append(reward)
+    runs = []
+    guard_actions = []
+    invader_actions = []
+    rewards = []
+    while not done:
+        guard_current_loc = env.guard.loc
+        invader_current_loc = env.invader.loc
+        current_obs = env._featurize()
+        guard_action, invader_action = env.act()
+        obs, reward, done, info = env.step(guard_action, invader_action)
+        runs.append(current_obs)
+        guard_actions.append(loc_to_action(guard_current_loc,guard_action))
+        invader_actions.append(loc_to_action(invader_current_loc,invader_action))
+        rewards.append(reward)
 
 
-        runs = np.asarray(runs)
-        guard_actions = np.asarray(guard_actions)
-        invader_actions = np.asarray(invader_actions)
-        rewards = np.asarray(rewards)
-        np.savez_compressed('../dataset/intelligent_bfs/' + phase + '_run_'  + str(i).zfill(10) + '.npz',
-                            runs=runs, guard_actions=guard_actions, invader_actions=invader_actions, rewards=rewards)
+    runs = np.asarray(runs)
+    guard_actions = np.asarray(guard_actions)
+    invader_actions = np.asarray(invader_actions)
+    rewards = np.asarray(rewards)
+    np.savez_compressed('../dataset/intelligent_bfs/run_'  + str(name).zfill(10) + '.npz',
+                        runs=runs, guard_actions=guard_actions, invader_actions=invader_actions, rewards=rewards)
 
+train_names = ['train_' + str(i).zfill(10) for i in range(20000)]
+test_names = ['test_' + str(i).zfill(10) for i in range(20000)]
+names = train_names + test_names
+pool = Pool(44)                         
+pool.map(run_sim, names)

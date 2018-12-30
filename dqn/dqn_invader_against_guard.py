@@ -27,16 +27,16 @@ from models import DQN
 USE_CUDA = torch.cuda.is_available()
 dtype = torch.cuda.FloatTensor if torch.cuda.is_available() else torch.FloatTensor
 
-BATCH_SIZE = 2048
+BATCH_SIZE = 1024
 GAMMA = 0.99
 REPLAY_BUFFER_SIZE = 1000000
-LEARNING_STARTS = 50000
+LEARNING_STARTS = 500000
 LEARNING_FREQ = 4
-FRAME_HISTORY_LEN = 1
-TARGER_UPDATE_FREQ = 10000
+FRAME_HISTORY_LEN = 4
+TARGERT_UPDATE_FREQ = 1000
 LEARNING_RATE = 0.01
-ALPHA = 0.95
-EPS = 0.01
+ALPHA = 0.90
+EPS = 0.02
 IMG_H = 32
 IMG_W = 32
 IMG_C = 3
@@ -113,7 +113,7 @@ optimizer_spec = OptimizerSpec(
         kwargs=dict(lr=LEARNING_RATE, alpha=ALPHA, eps=EPS),
     )
 
-exploration_schedule = LinearSchedule(1000000, 0.1)
+exploration_schedule = LinearSchedule(100000, 0.1)
 
 # Construct an epilson greedy policy with given exploration schedule
 def select_epilson_greedy_action(model, obs, t):
@@ -152,9 +152,7 @@ num_param_updates = 0
 mean_episode_reward = -float('nan')
 best_mean_episode_reward = -float('inf')
 last_obs = env.reset()
-LOG_EVERY_N_STEPS = 10000
 episodes_rewards = []
-episode_obs = [last_obs]
 
 for t in count():
     ### Step the env and store the transition
@@ -176,28 +174,21 @@ for t in count():
     guard_action, invader_action = env.act(action)
     # Advance one step
     obs, reward, done, _ = env.step(guard_action, invader_action)
-    episode_obs.append(cv2.resize(obs, (500,500), interpolation=cv2.INTER_AREA))
     # clip rewards between -1 and 1
     reward = -1 * reward
-#     reward = max(-1.0, min(reward, 1.0))
+    reward = max(-1.0, min(reward, 1.0))
     # Store other info in replay memory
     replay_buffer.store_effect(last_idx, action, reward, done)
     # Resets the environment when reaching an episode boundary.
     if done:
         episodes_rewards.append(reward)
         if len(episodes_rewards) % 100 == 0:
-            print (np.mean(episodes_rewards))
-            
-#             for img in episode_obs:
-#                 vis.image(img.transpose(2,0,1), win='1')
-#                 plt.pause(0.01)
-#             vis.close('1')
+            print (np.mean(episodes_rewards), t)
+            episodes_rewards = []
             
             torch.save(Q, '../weights/Q_dqn_invader.pt')
             torch.save(target_Q, '../weights/target_Q_dqn_invader.pt')
-            
-        episode_obs = []
-        
+                 
         obs = env.reset()
         
     last_obs = obs
@@ -250,7 +241,7 @@ for t in count():
         num_param_updates += 1
 
         # Periodically update the target network by Q network to target Q network
-        if num_param_updates % TARGER_UPDATE_FREQ == 0:
+        if num_param_updates % TARGERT_UPDATE_FREQ == 0:
             target_Q.load_state_dict(Q.state_dict())
 
 print (np.mean(episodes_rewards))

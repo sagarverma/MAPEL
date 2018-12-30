@@ -98,20 +98,18 @@ class Environment(object):
         """
          Reward for guard
         """
-        if self._get_distance(self.invader.loc, self.target.loc) < self._get_distance(self.guard.loc, self.target.loc):
-            if self._get_distance(self.invader.loc, self.target.loc) < self._get_distance(self.guard.loc, self.invader.loc):
-                return -0.5
-            else:
-                return 0.5
-        else:
-            return 0.5
 
         if self.done:
             if self.wins == "guard":
                 return 1
             if self.wins == "invader":
                 return -1
-
+        
+        invader_guard = self._get_distance(self.invader.loc, self.guard.loc) / 45.25
+        invader_target = self._get_distance(self.invader.loc, self.target.loc) / 45.25
+        guard_target = self._get_distance(self.guard.loc, self.target.loc) / 45.25
+        
+        return (invader_guard + invader_target + guard_target) / 3.0
 
     def act(self):
         """
