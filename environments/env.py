@@ -212,5 +212,16 @@ class Environment(object):
         plt.pause(self.sim_speed)
         plt.draw()
 
+class NEnvironment(Environment):
+    def __init__(self, *args, **kwargs):
+        super(NEnvironment, self).__init__(*args, **kwargs)
 
+    def act(self):
+        """
+        Invader and guard act inside environment. Invader and guard new positions are updated.
+        """
+        invader_action = self.invader.act(self.grid, self.target)
+        guard_action = self.guard.act(self.grid, self.invader, self.target)
+
+        return guard_action, invader_action
 
