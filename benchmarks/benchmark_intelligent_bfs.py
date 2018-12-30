@@ -50,8 +50,7 @@ class NGuard(Guard):
                 return [shortest_path2[self.speed][0], shortest_path2[self.speed][1]]
 
 guard_wins = 0
-for i in range(1):
-    # os.mkdir('dataset/sims/intelligent_bfs/' + str(i).zfill(2))
+for i in range(100):
 
     invader = Invader(speed=1)
     guard = NGuard(speed=1)
@@ -68,18 +67,8 @@ for i in range(1):
         current_obs = env.grid
         guard_action, invader_action = env.act()
         obs, reward, done, info = env.step(guard_action, invader_action)
-        env.render()
+#         env.render()
 
-        # img = np.zeros((32,32,3))
-        # img[obs == 1] = [255, 255, 255]
-        # img[obs == 7] = [255, 0, 0]
-        # img[obs == 8] = [0, 255, 0]
-        # img[obs == 9] = [0, 0, 255]
-        # cv2.imwrite('dataset/sims/intelligent_bfs/' + str(i).zfill(2) + '/' + str(j).zfill(10) + '.png', cv2.resize(img, (500,500), interpolation=cv2.INTER_AREA))
-        # #env.render()
-        # j += 1
-
-    # print (env.wins)
     if env.wins == 'guard':
         guard_wins += 1
 
