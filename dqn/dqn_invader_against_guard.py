@@ -34,9 +34,9 @@ LEARNING_STARTS = 500000
 LEARNING_FREQ = 4
 FRAME_HISTORY_LEN = 4
 TARGERT_UPDATE_FREQ = 1000
-LEARNING_RATE = 0.01
-ALPHA = 0.90
-EPS = 0.02
+LEARNING_RATE = 0.001
+ALPHA = 0.99
+EPS = 0.2
 IMG_H = 32
 IMG_W = 32
 IMG_C = 3
@@ -44,62 +44,13 @@ NUM_ACTIONS = 9
 
 agent = 'invader'
 
-class NEnvironment(Environment):
-    def __init__(self, *args, **kwargs):
-        super(NEnvironment, self).__init__(*args, **kwargs)
+# Build Environment
+invader = Invader(speed=1)
+guard = Guard2Targets(speed=1)
+target = Target(speed=0)
 
-    def act(self, action=None):
-        """
-        Invader and guard act inside environment. Invader and guard new positions are updated.
-        """
-        
-        if action != None:
-            if valid_loc(self.grid, action_to_loc(self.invader.loc, action)):
-                invader_action = action_to_loc(self.invader.loc, action)
-            else:
-                invader_action = self.invader.loc
-        else:
-            invader_action = loc_to_action(self.invader.loc, self.invader.act(self.grid, self.target))
-        guard_action = self.guard.act(self.grid, self.invader, self.target)
+env = Environment2Targets([32,32], guard, invader, target)
 
-        return guard_action, invader_action
-
-class NGuard(Guard):
-    def __init__(self, *args, **kwargs):
-        super(NGuard, self).__init__(*args, **kwargs)
-
-    def act(self, environment, target1, target2):
-        """
-        Guard moves to target or invader based on who is closest.
-        """
-        graph = NxGraph()
-        graph.grid_to_graph(environment)
-        shortest_path1 = graph.shortest_path((self.loc[0], self.loc[1]), (target1.loc[0], target1.loc[1]))
-        shortest_path2 = graph.shortest_path((self.loc[0], self.loc[1]), (target2.loc[0], target2.loc[1]))
-
-        if len(shortest_path1) <= len(shortest_path2):
-            if len(shortest_path1) <= self.speed:
-                return [shortest_path1[-1][0], shortest_path1[-1][1]]
-            else:
-                return [shortest_path1[self.speed][0], shortest_path1[self.speed][1]]
-        else:
-            if len(shortest_path2) <= self.speed:
-                return [shortest_path2[-1][0], shortest_path2[-1][1]]
-            else:
-                return [shortest_path2[self.speed][0], shortest_path2[self.speed][1]]
-
-
-class Variable(autograd.Variable):
-    def __init__(self, data, *args, **kwargs):
-        if USE_CUDA:
-            data = data.cuda()
-        super(Variable, self).__init__(data, *args, **kwargs)
-
-"""
-    OptimizerSpec containing following attributes
-        constructor: The optimizer constructor ex: RMSprop
-        kwargs: {Dict} arguments for constructing optimizer
-"""
 OptimizerSpec = namedtuple("OptimizerSpec", ["constructor", "kwargs"])
 
 Statistic = {
@@ -126,12 +77,7 @@ def select_epilson_greedy_action(model, obs, t):
     else:
         return torch.IntTensor([[random.randrange(NUM_ACTIONS)]])
     
-# Build Environment
-invader = Invader(speed=1)
-guard = NGuard(speed=1)
-target = Target(speed=0)
 
-env = NEnvironment([32,32], guard, invader, target)
 
 # vis = visdom.Visdom(port=8124)
 
@@ -158,25 +104,31 @@ for t in count():
     ### Step the env and store the transition
     # Store lastest observation in replay memory and last_idx can be used to store action, reward, done
     last_idx = replay_buffer.store_frame(last_obs)
+    print (last_idx, last_obs.shape)
     # encode_recent_observation will take the latest observation
     # that you pushed into the buffer and compute the corresponding
     # input that should be given to a Q network by appending some
     # previous frames.
     recent_observations = replay_buffer.encode_recent_observation()
+    print (recent_observations.shape)
 
+    guard_action, invader_action = env.act()
     # Choose random action if not yet start learning
     if t > LEARNING_STARTS:
         action = select_epilson_greedy_action(Q, recent_observations, t).item()
+        print (action)
     else:
-#         action = random.randrange(NUM_ACTIONS)
-        _, action = env.act()
+        action = random.randrange(NUM_ACTIONS)
+        print (action)
     
-    guard_action, invader_action = env.act(action)
+    
+    print (guard_action, invader_action)
     # Advance one step
     obs, reward, done, _ = env.step(guard_action, invader_action)
+    print (reward)
     # clip rewards between -1 and 1
     reward = -1 * reward
-    reward = max(-1.0, min(reward, 1.0))
+#     reward = max(-1.0, min(reward, 1.0))
     # Store other info in replay memory
     replay_buffer.store_effect(last_idx, action, reward, done)
     # Resets the environment when reaching an episode boundary.
@@ -192,7 +144,7 @@ for t in count():
         obs = env.reset()
         
     last_obs = obs
-
+    exit()
     ### Perform experience replay and train the network.
     # Note that this is only done if the replay buffer contains enough samples
     # for us to learn something useful -- until then, the model will not be
