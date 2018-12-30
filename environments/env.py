@@ -15,7 +15,7 @@ from graph import Graph, NxGraph
 
 class Environment(object):
 
-    def __init__(self, grid_size, guard, invader, target, fixed_grid=False, sim_speed=1):
+    def __init__(self, grid_size, guard, invader, target, fixed_grid=False, sim_speed=0.001):
         self.grid_size = grid_size
         self.fixed_grid = fixed_grid
         self.sim_speed = sim_speed
@@ -91,17 +91,27 @@ class Environment(object):
         self.done = self._init_game_state['done']
         self.wins = self._init_game_state['wins']
 
+    def _get_distance(self, loc1, loc2):
+        return ((loc1[0]-loc2[0])**2+(loc1[1]-loc2[1])**2)**0.5
+
     def _get_rewards(self):
         """
          Reward for guard
         """
+        if self._get_distance(self.invader.loc, self.target.loc) < self._get_distance(self.guard.loc, self.target.loc):
+            if self._get_distance(self.invader.loc, self.target.loc) < self._get_distance(self.guard.loc, self.invader.loc):
+                return -0.5
+            else:
+                return 0.5
+        else:
+            return 0.5
+
         if self.done:
             if self.wins == "guard":
                 return 1
             if self.wins == "invader":
                 return -1
 
-        return 0
 
     def act(self):
         """
@@ -170,6 +180,6 @@ class Environment(object):
         plt.imshow(self._featurize())
         plt.pause(self.sim_speed)
         plt.draw()
-        
-        
+
+
 
