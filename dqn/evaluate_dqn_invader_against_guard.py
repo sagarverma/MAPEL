@@ -26,7 +26,10 @@ import matplotlib.pyplot as plt
 import time
 import os
 
+<<<<<<< HEAD
 
+=======
+>>>>>>> a481c368a11700233855b30b7721d7b568796767
 
 class NEnvironment(Environment):
     def __init__(self, *args, **kwargs):

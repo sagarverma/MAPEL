@@ -19,6 +19,7 @@ def baseline_testing(grid_size):
         guard_action, invader_action = env.act()
         obs, reward, done, info = env.step(guard_action, invader_action)
         env.render()
+        print (reward)
 
     return env.wins
 

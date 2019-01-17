@@ -166,3 +166,27 @@ class Target(Agent):
         super(Target, self).__init__(id, speed, *args, **kwargs)
 
     '''Implement specific functions for target'''
+
+class NGuard(Guard):
+    def __init__(self, *args, **kwargs):
+        super(NGuard, self).__init__(*args, **kwargs)
+
+    def act(self, environment, target1, target2):
+        """
+        Guard moves to target or invader based on who is closest.
+        """
+        graph = NxGraph()
+        graph.grid_to_graph(environment)
+        shortest_path1 = graph.shortest_path((self.loc[0], self.loc[1]), (target1.loc[0], target1.loc[1]))
+        shortest_path2 = graph.shortest_path((self.loc[0], self.loc[1]), (target2.loc[0], target2.loc[1]))
+
+        if len(shortest_path1) <= len(shortest_path2):
+            if len(shortest_path1) <= self.speed:
+                return [shortest_path1[-1][0], shortest_path1[-1][1]]
+            else:
+                return [shortest_path1[self.speed][0], shortest_path1[self.speed][1]]
+        else:
+            if len(shortest_path2) <= self.speed:
+                return [shortest_path2[-1][0], shortest_path2[-1][1]]
+            else:
+                return [shortest_path2[self.speed][0], shortest_path2[self.speed][1]]
