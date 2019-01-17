@@ -122,7 +122,7 @@ for i in range(len(dates)-1):
                                          d2.shape[2]-input_size:d2.shape[2]])
                     ijs.append([d1.shape[1]-input_size,d1.shape[2]-input_size])
 
-                if len(batches1) == 100:
+                if len(batches1) == 110:
                     inp1 = w(torch.from_numpy(np.asarray(batches1) / 255.))
                     inp2 = w(torch.from_numpy(np.asarray(batches2) / 255.))
                     logits = model(inp1, inp2)
